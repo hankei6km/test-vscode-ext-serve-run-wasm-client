@@ -12,11 +12,11 @@ fn output<S: Read, T: Write, U: Write>(
         if value["id"].as_i64().unwrap() % 2 == 0 {
             // print value with traiing "lf"  by using writerOut
             writer_out
-                .write_all(format!("{}\n", value.to_string()).as_bytes())
+                .write_all(format!("{}\n", value).as_bytes())
                 .unwrap();
         } else {
             writer_err
-                .write_all(format!("{}\n", value.to_string()).as_bytes())
+                .write_all(format!("{}\n", value).as_bytes())
                 .unwrap();
         }
     }
@@ -72,19 +72,19 @@ pub mod run {
         pub files: Vec<String>,
     }
     pub struct Run {
-        memory_initial: u32,
-        memory_maximum: u32,
-        memory_shared: bool,
-        files: Vec<String>,
+        //memory_initial: u32,
+        //memory_maximum: u32,
+        //memory_shared: bool,
+        //files: Vec<String>,
     }
 
     impl Run {
-        pub fn new(args: RunArgs) -> Self {
+        pub fn new(_args: RunArgs) -> Self {
             Self {
-                memory_initial: args.memory_initial,
-                memory_maximum: args.memory_maximum,
-                memory_shared: args.memory_shared,
-                files: args.files,
+                //memory_initial: args.memory_initial,
+                //memory_maximum: args.memory_maximum,
+                //memory_shared: args.memory_shared,
+                //files: args.files,
             }
         }
         pub fn run(&self) {
