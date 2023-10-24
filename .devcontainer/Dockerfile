@@ -1,4 +1,4 @@
-FROM rust:1.73-bullseye
+FROM mcr.microsoft.com/devcontainers/rust:latest
 
 # install cargo binstall to reduce image size
 WORKDIR /usr/local/cargo/bin
