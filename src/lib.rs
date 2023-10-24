@@ -13,11 +13,11 @@ fn output<S: Read, T: Write, U: Write>(
         if value["id"].as_i64().unwrap() % 2 == 0 {
             // print value with traiing "lf"  by using writerOut
             writer_out
-                .write_all(format!("{}\n", value).as_bytes())
+                .write_all(format!("{}\n", value["data"]).as_bytes())
                 .unwrap();
         } else {
             writer_err
-                .write_all(format!("{}\n", value).as_bytes())
+                .write_all(format!("{}\n", value["data"]).as_bytes())
                 .unwrap();
         }
     }
@@ -32,11 +32,11 @@ mod tests {
         use std::io::{BufReader, Cursor};
 
         let input = Cursor::new(
-            r#"{"id": 1, "name": "Alice"}
-    {"id": 2, "name": "Bob"}
-    {"id": 3, "name": "Charlie"}
-    {"id": 4, "name": "Dave"}
-    {"id": 5, "name": "Eve"}"#,
+            r#"{"id": 1, "data": "Alice"}
+    {"id": 2, "data": "Bob"}
+    {"id": 3, "data": "Charlie"}
+    {"id": 4, "data": "Dave"}
+    {"id": 5, "data": "Eve"}"#,
         );
         let reader = BufReader::new(input);
         let stream = serde_json::Deserializer::from_reader(reader).into_iter::<serde_json::Value>();
@@ -51,11 +51,11 @@ mod tests {
 
         assert_eq!(
             stdout,
-            b"{\"id\":2,\"name\":\"Bob\"}\n{\"id\":4,\"name\":\"Dave\"}\n"
+            b"\"Bob\"\n\"Dave\"\n"
         );
         assert_eq!(
             stderr,
-            b"{\"id\":1,\"name\":\"Alice\"}\n{\"id\":3,\"name\":\"Charlie\"}\n{\"id\":5,\"name\":\"Eve\"}\n"
+            b"\"Alice\"\n\"Charlie\"\n\"Eve\"\n"
         );
     }
 }
@@ -68,7 +68,7 @@ struct ArgsArgs {
 }
 
 fn build_url(run_args: RunArgs) -> Url {
-    let mut url = Url::parse("http://localhost/run").unwrap();
+    let mut url = Url::parse("http://localhost:3000/run").unwrap();
 
     let mut args: Vec<String> = vec![
         "--memory_initial".to_string(),
@@ -106,7 +106,7 @@ mod test_build_url {
         let url = build_url(args);
         assert_eq!(
             url.as_str(),
-            "http://localhost/run?args=%5B%22--memory_initial%22%2C%221%22%2C%22--memory_maximum%22%2C%222%22%2C%22--memory_shared%22%2C%22true%22%2C%22--%22%2C%22test1.wasm%22%2C%22--foo%22%2C%22bar%22%5D",
+            "http://localhost:3000/run?args=%5B%22--memory_initial%22%2C%221%22%2C%22--memory_maximum%22%2C%222%22%2C%22--memory_shared%22%2C%22true%22%2C%22--%22%2C%22test1.wasm%22%2C%22--foo%22%2C%22bar%22%5D"
         );
     }
 }
@@ -139,9 +139,9 @@ pub mod run {
             // let files = &self.files;
             // println!("memory_initial: {memory_initial:?}");
             // println!("files: {files:?}")
-            let response = reqwest::blocking::get("http://httpbin.org/stream/10").unwrap();
+            let response = reqwest::blocking::get(self.url.as_str()).unwrap();
 
-            println!("Status: {}", response.status());
+            // println!("Status: {}", response.status());
 
             let reader = BufReader::new(response);
             let stream = Deserializer::from_reader(reader).into_iter::<Value>();
@@ -150,10 +150,6 @@ pub mod run {
                 BufWriter::new(std::io::stdout()),
                 BufWriter::new(std::io::stderr()),
             );
-            println!("{}", self.url);
-            //for value in stream {
-            //    println!("-{}", value.unwrap());
-            //}
         }
     }
 }
