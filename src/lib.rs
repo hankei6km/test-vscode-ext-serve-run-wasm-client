@@ -76,6 +76,7 @@ fn build_url(run_args: RunArgs) -> Url {
         "--memory_maximum".to_string(),
         run_args.memory_maximum.to_string(),
         "--memory_shared".to_string(),
+        run_args.memory_shared.to_string(),
         "--".to_string(),
     ];
     args.extend(run_args.files);
@@ -105,7 +106,7 @@ mod test_build_url {
         let url = build_url(args);
         assert_eq!(
             url.as_str(),
-            "http://localhost/run?args=%5B%22--memory_initial%22%2C%221%22%2C%22--memory_maximum%22%2C%222%22%2C%22--memory_shared%22%2C%22--%22%2C%22test1.wasm%22%2C%22--foo%22%2C%22bar%22%5D"
+            "http://localhost/run?args=%5B%22--memory_initial%22%2C%221%22%2C%22--memory_maximum%22%2C%222%22%2C%22--memory_shared%22%2C%22true%22%2C%22--%22%2C%22test1.wasm%22%2C%22--foo%22%2C%22bar%22%5D",
         );
     }
 }
