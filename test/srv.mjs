@@ -24,6 +24,8 @@ function getRouteAndArgs(url) {
   };
 }
 
+const ipcHandlePath = process.env["IPC_HANDLE_PATH"];
+
 const server = http.createServer();
 
 server.once("request", (req, res) => {
@@ -34,4 +36,4 @@ server.once("request", (req, res) => {
   server.close();
 });
 
-server.listen(3000);
+server.listen(ipcHandlePath || 3000);
