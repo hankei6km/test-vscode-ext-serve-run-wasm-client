@@ -24,14 +24,21 @@ function getRouteAndArgs(url) {
   };
 }
 
+const ipcHandlePath = process.env["IPC_HANDLE_PATH"];
+
 const server = http.createServer();
 
-server.once("request", (req, res) => {
+server.once("request", async (req, res) => {
   const r = getRouteAndArgs(req.url);
 
-  res.write(JSON.stringify({ id: 0, data: r.route }));
-  res.end(JSON.stringify({ id: 1, data: r.args }));
+  const s1 = JSON.stringify({ id: 0, data: r.route });
+  await new Promise((resolve) => res.write(s1.slice(0, 3), resolve));
+  await new Promise((resolve) => res.write(s1.slice(3), resolve));
+
+  const s2 = JSON.stringify({ id: 1, data: r.args });
+  await new Promise((resolve) => res.write(s2.slice(0, 3), resolve));
+  res.end(s2.slice(3));
   server.close();
 });
 
-server.listen(3000);
+server.listen(ipcHandlePath || 3000);

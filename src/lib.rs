@@ -1,70 +1,92 @@
-use run::RunArgs;
-use serde_json::de::IoRead;
-use serde_json::{StreamDeserializer, Value};
-use std::io::{BufReader, BufWriter, Read, Write};
+mod ndjson;
 
-fn output<S: Read, T: Write, U: Write>(
-    stream: StreamDeserializer<'_, IoRead<BufReader<S>>, Value>,
-    mut writer_out: BufWriter<T>,
-    mut writer_err: BufWriter<U>,
+use futures_core::stream::Stream;
+use futures_util::pin_mut;
+use futures_util::stream::StreamExt;
+
+use serde_json::Value;
+use tokio::io::{AsyncWriteExt, BufWriter};
+
+use run::RunArgs;
+
+async fn output<T: AsyncWriteExt, U: AsyncWriteExt>(
+    stream: impl Stream<Item = Value>,
+    writer_out: BufWriter<T>,
+    writer_err: BufWriter<U>,
 ) {
-    for value in stream {
-        let value = value.unwrap();
+    pin_mut!(stream);
+    pin_mut!(writer_out);
+    pin_mut!(writer_err);
+    while let Some(value) = stream.next().await {
         if value["id"].as_i64().unwrap() % 2 == 0 {
             // print value with traiing "lf"  by using writerOut
             writer_out
                 .write_all(format!("{}\n", value["data"]).as_bytes())
+                .await
                 .unwrap();
         } else {
             writer_err
                 .write_all(format!("{}\n", value["data"]).as_bytes())
+                .await
                 .unwrap();
         }
     }
+    writer_out.flush().await.unwrap();
+    writer_err.flush().await.unwrap();
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use hyper::{Body, Response};
 
-    #[test]
-    fn test_output() {
-        use std::io::{BufReader, Cursor};
+    use crate::{ndjson::ndjson, output};
 
-        let input = Cursor::new(
-            r#"{"id": 1, "data": "Alice"}
-    {"id": 2, "data": "Bob"}
-    {"id": 3, "data": "Charlie"}
-    {"id": 4, "data": "Dave"}
-    {"id": 5, "data": "Eve"}"#,
-        );
-        let reader = BufReader::new(input);
-        let stream = serde_json::Deserializer::from_reader(reader).into_iter::<serde_json::Value>();
+    #[tokio::test]
+    async fn test_output() {
+        let response = Response::new(Body::from(
+            "{\"id\": 1, \"data\": \"Alice\"}
+            {\"id\": 2, \"data\": \"Bob\"}
+            {\"id\": 3, \"data\": \"Charlie\"}
+            {\"id\": 4, \"data\": \"Dave\"}
+            {\"id\": 5, \"data\": \"Eve\"}
+            ",
+        ));
+        let stream = ndjson(response);
 
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
         output(
             stream,
-            std::io::BufWriter::new(&mut stdout),
-            std::io::BufWriter::new(&mut stderr),
-        );
+            tokio::io::BufWriter::new(&mut stdout),
+            tokio::io::BufWriter::new(&mut stderr),
+        )
+        .await;
 
-        assert_eq!(
-            stdout,
-            b"\"Bob\"\n\"Dave\"\n"
-        );
-        assert_eq!(
-            stderr,
-            b"\"Alice\"\n\"Charlie\"\n\"Eve\"\n"
-        );
+        assert_eq!(stdout, b"\"Bob\"\n\"Dave\"\n");
+        assert_eq!(stderr, b"\"Alice\"\n\"Charlie\"\n\"Eve\"\n");
     }
 }
 
+use hyper::Uri;
 use serde::Serialize;
 use url::Url;
+
 #[derive(Serialize)]
 struct ArgsArgs {
     args: Vec<String>,
+}
+
+fn build_uri_uds(run_args: RunArgs, socket: &str) -> Uri {
+    use hyperlocal::Uri;
+
+    let u = build_url(run_args);
+    // get path and query from url
+    let p = format!("{}?{}", u.path(), u.query().unwrap());
+
+    // get socket path from environment variable IPC_HANDLE_PATH.
+    let url = Uri::new(socket, p.as_str()).into();
+
+    url
 }
 
 fn build_url(run_args: RunArgs) -> Url {
@@ -112,11 +134,13 @@ mod test_build_url {
 }
 
 pub mod run {
-    use serde_json::{Deserializer, Value};
-    use std::io::{BufReader, BufWriter};
-    use url::Url;
+    use hyper::{Client, Uri};
+    use hyperlocal::UnixClientExt;
+    use tokio::io::BufWriter;
+    use tokio::runtime::Runtime;
 
-    use crate::{build_url, output};
+    use crate::ndjson::ndjson;
+    use crate::{build_uri_uds, output};
 
     pub struct RunArgs {
         pub memory_initial: u32,
@@ -125,31 +149,53 @@ pub mod run {
         pub files: Vec<String>,
     }
     pub struct Run {
-        url: Url,
+        url: Uri,
     }
 
     impl Run {
         pub fn new(run_args: RunArgs) -> Self {
+            // TODO: 指定方法はもう少し考える
+            let socket = std::env::var("IPC_HANDLE_PATH").unwrap();
             Self {
-                url: build_url(run_args),
+                url: build_uri_uds(run_args, socket.as_str()),
             }
         }
         pub fn run(&self) {
-            // let memory_initial = self.memory_initial;
-            // let files = &self.files;
-            // println!("memory_initial: {memory_initial:?}");
-            // println!("files: {files:?}")
-            let response = reqwest::blocking::get(self.url.as_str()).unwrap();
+            let rt = Runtime::new().unwrap();
+            rt.block_on(async move {
+                let client = Client::unix();
 
-            // println!("Status: {}", response.status());
+                let response = client.get(self.url.clone()).await.unwrap();
 
-            let reader = BufReader::new(response);
-            let stream = Deserializer::from_reader(reader).into_iter::<Value>();
-            output(
-                stream,
-                BufWriter::new(std::io::stdout()),
-                BufWriter::new(std::io::stderr()),
-            );
+                let n = ndjson(response);
+                output(
+                    n,
+                    BufWriter::new(tokio::io::stdout()),
+                    BufWriter::new(tokio::io::stderr()),
+                )
+                .await;
+                //pin_mut!(n);
+                //while let Some(value) = n.next().await {
+                //    io::stdout()
+                //        .write_all(format!("{}\n", value["data"]).as_bytes())
+                //        .await
+                //        .unwrap();
+                //}
+
+                //tokio::join!(f1, f2);
+            });
+
+            // let response = reqwest::blocking::get(self.url.as_str()).unwrap();
+
+            // // println!("Status: {}", response.status());
+
+            // let reader = BufReader::new(response);
+            // let stream = Deserializer::from_reader(reader).into_iter::<Value>();
+            // output(
+            //     stream,
+            //     BufWriter::new(std::io::stdout()),
+            //     BufWriter::new(std::io::stderr()),
+            // );
         }
     }
 }

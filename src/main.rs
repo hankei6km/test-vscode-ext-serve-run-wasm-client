@@ -36,6 +36,9 @@ enum Commands {
     // Inspect(Inspect),
 }
 
+//use std::error::Error;
+//#[tokio::main]
+//async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 fn main() {
     let cli = Cli::parse();
 
@@ -48,7 +51,7 @@ fn main() {
             memory_shared,
             files,
         } => {
-            let cmd=Run::new(RunArgs {
+            let cmd = Run::new(RunArgs {
                 memory_initial: *memory_initial,
                 memory_maximum: *memory_maximum,
                 memory_shared: *memory_shared,
@@ -56,5 +59,5 @@ fn main() {
             });
             cmd.run();
         }
-    }
+    };
 }
