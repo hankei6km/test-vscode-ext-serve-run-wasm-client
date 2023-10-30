@@ -32,6 +32,9 @@ pub fn ndjson(response: Response<Body>) -> impl Stream<Item = Value> {
     stream! {
         let br = response_to_buf_reader(response);
         pin_mut!(br);
+        // TODO tokio_util::io::ReaderStream とアダプター利用を検討.
+        //    - Deserializer の結果を async 対応すれば stream! マクロを使わずに済むはず
+        //    - flatmap で複数行をまとめて desirealize することができる、かな?
          loop{
         let mut buf:String=String::new();
             let num_bytes = br.read_line(&mut buf).await.unwrap();

@@ -8,6 +8,7 @@ OUT_FILE="${TEMP_DIR}/out"
 ERR_FILE="${TEMP_DIR}/err"
 
 export IPC_HANDLE_PATH="${TEMP_DIR}/ipc.sock"
+# TODO: リクエストが実行される前にテストが落ちるとサーバーが稼働したままになる.後処理を検討.
 node test/srv.mjs &
 
 cargo build -q
