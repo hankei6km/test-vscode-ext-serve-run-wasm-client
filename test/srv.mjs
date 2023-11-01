@@ -37,7 +37,16 @@ server.once("request", async (req, res) => {
 
   const s2 = JSON.stringify({ id: 1, data: r.args });
   await new Promise((resolve) => res.write(s2.slice(0, 3), resolve));
-  res.end(s2.slice(3));
+  await new Promise((resolve) => res.write(s2.slice(3), resolve));
+
+  // handle data from request
+  for await (const chunk of req) {
+    //  chunk to UInt8Array
+    const data = new Uint8Array(chunk);
+    const s = JSON.stringify({ id: 2, data: Array.from(data) });
+    await new Promise((resolve) => res.write(s, resolve));
+  }
+  res.end();
   server.close();
 });
 
