@@ -13,9 +13,11 @@ node test/srv.mjs &
 
 cargo build -q
 echo "START"
-./target/debug/workspace run --memory-initial 100 test.wasm \
+# ワークフローの RUN で実行した場合、端末からの入力にならないので "" を渡すことで対応.
+echo -n "" | ./target/debug/workspace run --memory-initial 100 test.wasm \
     1> "${OUT_FILE}" \
     2> "${ERR_FILE}"
+echo "END"
 
 cat "${OUT_FILE}"
 cat "${ERR_FILE}"

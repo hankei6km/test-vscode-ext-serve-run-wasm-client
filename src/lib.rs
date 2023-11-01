@@ -134,10 +134,12 @@ mod test_build_url {
 }
 
 pub mod run {
-    use hyper::{Client, Uri};
+    use hyper::{Body, Client, Method, Request, Uri};
     use hyperlocal::UnixClientExt;
-    use tokio::io::BufWriter;
+    use is_terminal::IsTerminal;
+    use tokio::io::{stdin, BufReader, BufWriter};
     use tokio::runtime::Runtime;
+    use tokio_util::io::ReaderStream;
 
     use crate::ndjson::ndjson;
     use crate::{build_uri_uds, output};
@@ -148,6 +150,11 @@ pub mod run {
         pub memory_shared: bool,
         pub files: Vec<String>,
     }
+    enum MyEnum {
+        Empty,
+        Body(Body),
+    }
+
     pub struct Run {
         url: Uri,
     }
@@ -165,7 +172,30 @@ pub mod run {
             rt.block_on(async move {
                 let client = Client::unix();
 
-                let response = client.get(self.url.clone()).await.unwrap();
+                // mkae req with  POST method,
+                // path stdin as reader to body.
+                let r = Request::builder()
+                    .method(Method::POST)
+                    .uri(self.url.clone());
+                // ターミナルである場合は empty にする。
+                // 実際はどうする？
+                let body = if std::io::stdin().is_terminal() {
+                    MyEnum::Empty
+                } else {
+                    MyEnum::Body({
+                        let reader = BufReader::new(stdin());
+                        let stream = ReaderStream::new(reader);
+                        Body::wrap_stream(stream)
+                    })
+                };
+                let req = match body {
+                    MyEnum::Empty => r.body(Body::empty()).unwrap(),
+                    MyEnum::Body(stream) => r.body(Body::wrap_stream(stream)).unwrap(),
+                };
+
+                //r.body(Body::wrap_stream(stream)).unwrap()
+
+                let response = client.request(req).await.unwrap();
 
                 let n = ndjson(response);
                 output(
