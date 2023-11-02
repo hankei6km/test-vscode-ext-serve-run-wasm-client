@@ -20,9 +20,11 @@ echo -n "" | ./target/debug/workspace run --memory-initial 100 test.wasm \
 echo "END"
 
 cat "${OUT_FILE}"
+echo ""
 cat "${ERR_FILE}"
+echo ""
 
-diff <<< '"/run"' "${OUT_FILE}" -
-diff <<< '["--memory_initial","100","--memory_maximum","0","--memory_shared","true","--","test.wasm"]' "${ERR_FILE}" -
+diff <(echo -n '/run') "${OUT_FILE}"
+diff <(echo -n '["--memory_initial","100","--memory_maximum","0","--memory_shared","true","--","test.wasm"]') "${ERR_FILE}"
 
 echo "PASS"

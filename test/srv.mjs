@@ -1,5 +1,20 @@
 import * as http from "node:http";
 
+function dataToNumberArray(data) {
+  return Array.from(
+    (() => {
+      if (typeof data === "string") {
+        return new TextEncoder().encode(data);
+      } else if (Array.isArray(data)) {
+        return new Uint8Array(data);
+      } else if (data instanceof Uint8Array) {
+        return data;
+      }
+      throw new Error("invalid data type");
+    })()
+  );
+}
+
 function getRouteAndArgs(url) {
   const p = (() => {
     const p = url.split("?", 2);
@@ -31,19 +46,21 @@ const server = http.createServer();
 server.once("request", async (req, res) => {
   const r = getRouteAndArgs(req.url);
   if (req.method === "POST") {
-    const s1 = JSON.stringify({ id: 0, data: r.route });
+    const s1 = JSON.stringify({ id: 0, data: dataToNumberArray(r.route) });
     await new Promise((resolve) => res.write(s1.slice(0, 3), resolve));
     await new Promise((resolve) => res.write(s1.slice(3), resolve));
 
-    const s2 = JSON.stringify({ id: 1, data: r.args });
+    const s2 = JSON.stringify({
+      id: 1,
+      data: dataToNumberArray(JSON.stringify(r.args)),
+    });
     await new Promise((resolve) => res.write(s2.slice(0, 3), resolve));
     await new Promise((resolve) => res.write(s2.slice(3), resolve));
 
     // handle data from request
     for await (const chunk of req) {
       //  chunk to UInt8Array
-      const data = new Uint8Array(chunk);
-      const s = JSON.stringify({ id: 2, data: Array.from(data) });
+      const s = JSON.stringify({ id: 2, data: dataToNumberArray(chunk) });
       await new Promise((resolve) => res.write(s, resolve));
     }
     res.end();

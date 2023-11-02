@@ -18,17 +18,13 @@ async fn output<T: AsyncWriteExt, U: AsyncWriteExt>(
     pin_mut!(writer_out);
     pin_mut!(writer_err);
     while let Some(value) = stream.next().await {
+        // get data(i64 array) as &[u8]
+        let data = value["data"].as_array().unwrap();
+        let data: Vec<u8> = data.iter().map(|v| v.as_i64().unwrap() as u8).collect();
         if value["id"].as_i64().unwrap() % 2 == 0 {
-            // print value with traiing "lf"  by using writerOut
-            writer_out
-                .write_all(format!("{}\n", value["data"]).as_bytes())
-                .await
-                .unwrap();
+            writer_out.write_all(&data).await.unwrap();
         } else {
-            writer_err
-                .write_all(format!("{}\n", value["data"]).as_bytes())
-                .await
-                .unwrap();
+            writer_err.write_all(&data).await.unwrap();
         }
     }
     writer_out.flush().await.unwrap();
@@ -43,14 +39,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_output() {
-        let response = Response::new(Body::from(
-            "{\"id\": 1, \"data\": \"Alice\"}
-            {\"id\": 2, \"data\": \"Bob\"}
-            {\"id\": 3, \"data\": \"Charlie\"}
-            {\"id\": 4, \"data\": \"Dave\"}
-            {\"id\": 5, \"data\": \"Eve\"}
-            ",
-        ));
+    let response = Response::new(Body::from(
+        "{\"id\": 1, \"data\": [65, 108, 105, 99, 101]}
+        {\"id\": 2, \"data\": [66, 111, 98]}
+        {\"id\": 3, \"data\": [67, 104, 97, 114, 108, 105, 101]}
+        {\"id\": 4, \"data\": [68, 97, 118, 101]}
+        {\"id\": 5, \"data\": [69, 118, 101]}
+        ",
+    ));
         let stream = ndjson(response);
 
         let mut stdout = Vec::new();
@@ -62,8 +58,8 @@ mod tests {
         )
         .await;
 
-        assert_eq!(stdout, b"\"Bob\"\n\"Dave\"\n");
-        assert_eq!(stderr, b"\"Alice\"\n\"Charlie\"\n\"Eve\"\n");
+        assert_eq!(stdout, b"BobDave");
+        assert_eq!(stderr, b"AliceCharlieEve");
     }
 }
 
