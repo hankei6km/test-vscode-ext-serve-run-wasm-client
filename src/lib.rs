@@ -18,17 +18,13 @@ async fn output<T: AsyncWriteExt, U: AsyncWriteExt>(
     pin_mut!(writer_out);
     pin_mut!(writer_err);
     while let Some(value) = stream.next().await {
+        // get data(i64 array) as &[u8]
+        let data = value["data"].as_array().unwrap();
+        let data: Vec<u8> = data.iter().map(|v| v.as_i64().unwrap() as u8).collect();
         if value["id"].as_i64().unwrap() % 2 == 0 {
-            // print value with traiing "lf"  by using writerOut
-            writer_out
-                .write_all(format!("{}\n", value["data"]).as_bytes())
-                .await
-                .unwrap();
+            writer_out.write_all(&data).await.unwrap();
         } else {
-            writer_err
-                .write_all(format!("{}\n", value["data"]).as_bytes())
-                .await
-                .unwrap();
+            writer_err.write_all(&data).await.unwrap();
         }
     }
     writer_out.flush().await.unwrap();
@@ -43,14 +39,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_output() {
-        let response = Response::new(Body::from(
-            "{\"id\": 1, \"data\": \"Alice\"}
-            {\"id\": 2, \"data\": \"Bob\"}
-            {\"id\": 3, \"data\": \"Charlie\"}
-            {\"id\": 4, \"data\": \"Dave\"}
-            {\"id\": 5, \"data\": \"Eve\"}
-            ",
-        ));
+    let response = Response::new(Body::from(
+        "{\"id\": 1, \"data\": [65, 108, 105, 99, 101]}
+        {\"id\": 2, \"data\": [66, 111, 98]}
+        {\"id\": 3, \"data\": [67, 104, 97, 114, 108, 105, 101]}
+        {\"id\": 4, \"data\": [68, 97, 118, 101]}
+        {\"id\": 5, \"data\": [69, 118, 101]}
+        ",
+    ));
         let stream = ndjson(response);
 
         let mut stdout = Vec::new();
@@ -62,8 +58,8 @@ mod tests {
         )
         .await;
 
-        assert_eq!(stdout, b"\"Bob\"\n\"Dave\"\n");
-        assert_eq!(stderr, b"\"Alice\"\n\"Charlie\"\n\"Eve\"\n");
+        assert_eq!(stdout, b"BobDave");
+        assert_eq!(stderr, b"AliceCharlieEve");
     }
 }
 
@@ -134,10 +130,12 @@ mod test_build_url {
 }
 
 pub mod run {
-    use hyper::{Client, Uri};
+    use hyper::{Body, Client, Method, Request, Uri};
     use hyperlocal::UnixClientExt;
-    use tokio::io::BufWriter;
+    use is_terminal::IsTerminal;
+    use tokio::io::{stdin, BufReader, BufWriter};
     use tokio::runtime::Runtime;
+    use tokio_util::io::ReaderStream;
 
     use crate::ndjson::ndjson;
     use crate::{build_uri_uds, output};
@@ -148,6 +146,11 @@ pub mod run {
         pub memory_shared: bool,
         pub files: Vec<String>,
     }
+    enum MyEnum {
+        Empty,
+        Body(Body),
+    }
+
     pub struct Run {
         url: Uri,
     }
@@ -165,7 +168,30 @@ pub mod run {
             rt.block_on(async move {
                 let client = Client::unix();
 
-                let response = client.get(self.url.clone()).await.unwrap();
+                // mkae req with  POST method,
+                // path stdin as reader to body.
+                let r = Request::builder()
+                    .method(Method::POST)
+                    .uri(self.url.clone());
+                // ターミナルである場合は empty にする。
+                // 実際はどうする？
+                let body = if std::io::stdin().is_terminal() {
+                    MyEnum::Empty
+                } else {
+                    MyEnum::Body({
+                        let reader = BufReader::new(stdin());
+                        let stream = ReaderStream::new(reader);
+                        Body::wrap_stream(stream)
+                    })
+                };
+                let req = match body {
+                    MyEnum::Empty => r.body(Body::empty()).unwrap(),
+                    MyEnum::Body(stream) => r.body(Body::wrap_stream(stream)).unwrap(),
+                };
+
+                //r.body(Body::wrap_stream(stream)).unwrap()
+
+                let response = client.request(req).await.unwrap();
 
                 let n = ndjson(response);
                 output(
